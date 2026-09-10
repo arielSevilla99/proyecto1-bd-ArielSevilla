@@ -104,3 +104,111 @@ CREATE TRIGGER trg_evitar_ciclo
 BEFORE INSERT OR UPDATE ON categorias
 FOR EACH ROW EXECUTE FUNCTION evitar_ciclo_categorias();
 
+--nueva parte 
+
+
+
+-- AMPLIACIÓN: MÓDULO 1 - UBICACIONES (RF-08, RF-09, RF-10)
+
+CREATE TABLE ubicaciones (
+    id_ubicacion SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    direccion VARCHAR(150) NOT NULL,
+    ciudad VARCHAR(50) NOT NULL,
+    capacidad INT NOT NULL CHECK (capacidad > 0)
+);
+
+ALTER TABLE eventos
+    ADD COLUMN id_ubicacion INT REFERENCES ubicaciones(id_ubicacion);
+
+CREATE VIEW vista_ranking_ubicaciones AS
+SELECT
+    u.id_ubicacion,
+    u.nombre,
+    u.ciudad,
+    COUNT(e.id_evento) AS total_eventos
+FROM ubicaciones u
+LEFT JOIN eventos e ON e.id_ubicacion = u.id_ubicacion
+GROUP BY u.id_ubicacion, u.nombre, u.ciudad
+ORDER BY total_eventos DESC;
+
+
+-- AMPLIACIÓN: MÓDULO 2 - DISPONIBILIDAD (RF-11, RF-12)
+
+CREATE TABLE tipos_disponibilidad (
+    id_tipo SERIAL PRIMARY KEY,
+    nombre VARCHAR(30) NOT NULL UNIQUE
+);
+
+INSERT INTO tipos_disponibilidad (nombre)
+VALUES ('disponible'), ('ocupado'), ('no disponible');
+
+CREATE TABLE disponibilidades (
+    id_disponibilidad SERIAL PRIMARY KEY,
+    id_usuario INT NOT NULL REFERENCES usuarios(id_usuario),
+    fecha DATE NOT NULL,
+    hora_inicio TIME NOT NULL,
+    hora_fin TIME NOT NULL,
+    id_tipo INT NOT NULL REFERENCES tipos_disponibilidad(id_tipo),
+    CONSTRAINT check_horas_disponibilidad CHECK (hora_fin > hora_inicio)
+);
+
+-- módulo R-12, esto es para despues de la implementación, todavia no se usa,
+-- por eso no está en uso, pero se pone de una vez para dejarlo limpio y listo
+
+
+-- RF-12: Ejemplo de consulta para ver usuarios libres en un rango horario
+-- (en la app, estos valores vendrían del selector de fecha/hora)
+-- SELECT us.id_usuario, us.nombre, us.apellido
+-- FROM usuarios us
+-- WHERE us.activo = TRUE
+-- AND us.id_usuario NOT IN (
+--     SELECT id_usuario_propietario FROM eventos
+--     WHERE fecha_inicio::DATE = '2024-01-15'
+--     AND fecha_inicio::TIME < '16:00' AND fecha_fin::TIME > '14:00'
+-- )
+-- AND us.id_usuario NOT IN (
+--     SELECT d.id_usuario FROM disponibilidades d
+--     JOIN tipos_disponibilidad td ON td.id_tipo = d.id_tipo
+--     WHERE d.fecha = '2024-01-15'
+--     AND d.hora_inicio < '16:00' AND d.hora_fin > '14:00'
+--     AND td.nombre != 'disponible'
+-- );
+
+
+-- AMPLIACIÓN: MÓDULO 3 - TAREAS (RF-15, RF-16, RF-17)
+CREATE TABLE tareas (
+    id_tarea SERIAL PRIMARY KEY,
+    id_evento INT NOT NULL REFERENCES eventos(id_evento) ON DELETE CASCADE,
+    id_usuario_responsable INT NOT NULL REFERENCES usuarios(id_usuario),
+    titulo VARCHAR(100) NOT NULL,
+    descripcion TEXT,
+    prioridad VARCHAR(20) DEFAULT 'media'
+        CHECK (prioridad IN ('baja', 'media', 'alta')),
+    fecha_limite DATE,
+    estado VARCHAR(20) DEFAULT 'Pendiente'
+        CHECK (estado IN ('Pendiente', 'En progreso', 'Completada', 'Cancelada'))
+);
+
+CREATE VIEW vista_tareas_pendientes_usuario AS
+SELECT
+    t.id_usuario_responsable,
+    us.nombre,
+    us.apellido,
+    COUNT(*) FILTER (WHERE t.estado IN ('Pendiente', 'En progreso')) AS tareas_pendientes,
+    COUNT(*) FILTER (WHERE t.estado != 'Completada' AND t.fecha_limite < CURRENT_DATE) AS tareas_vencidas
+FROM tareas t
+JOIN usuarios us ON us.id_usuario = t.id_usuario_responsable
+GROUP BY t.id_usuario_responsable, us.nombre, us.apellido;
+
+CREATE VIEW vista_carga_trabajo AS
+SELECT
+    us.id_usuario,
+    us.nombre,
+    us.apellido,
+    COUNT(*) FILTER (WHERE t.estado IN ('Pendiente', 'En progreso')) AS carga_activa,
+    COUNT(*) FILTER (WHERE t.estado != 'Completada' AND t.fecha_limite < CURRENT_DATE) AS vencidas
+FROM usuarios us
+LEFT JOIN tareas t ON t.id_usuario_responsable = us.id_usuario
+GROUP BY us.id_usuario, us.nombre, us.apellido
+ORDER BY carga_activa DESC;
