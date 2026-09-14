@@ -357,6 +357,15 @@ class AppAgenda(ctk.CTk):
         ctk.CTkButton(form, text="💾 Actualizar seleccionada", command=self.actualizar_ubicacion).pack(fill="x", padx=10, pady=5)
         ctk.CTkButton(form, text="🧹 Nueva / Limpiar", command=self.limpiar_form_ubicacion, fg_color="gray").pack(fill="x", padx=10, pady=5)
         ctk.CTkButton(form, text="🗑 Eliminar seleccionada", command=self.eliminar_ubicacion, fg_color="#b33939", hover_color="#8f2d2d").pack(fill="x", padx=10, pady=5)
+        panel_reporte = ctk.CTkFrame(self.tab_ubicaciones)
+        panel_reporte.pack(fill="both", expand=False, padx=15, pady=(0, 15))
+
+        ctk.CTkLabel(panel_reporte, text="Ranking de ubicaciones más utilizadas",
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=12, pady=(10, 8))
+
+        self.tree_ranking_ubicaciones = self.crear_treeview(
+            panel_reporte, ("Ubicación", "Ciudad", "Total de eventos"), (200, 150, 150)
+        )
 
     def ubicacion_seleccionada_id(self):
         sel = self.tree_ubicaciones.selection()
@@ -454,6 +463,16 @@ class AppAgenda(ctk.CTk):
             for row in rows:
                 self.tree_ubicaciones.insert("", "end", values=row)
                 self.ubicaciones_combo[f"{row[1]} — #{row[0]}"] = row[0]
+
+            # RF-10: ranking de ubicaciones
+            ranking = self.ejecutar_consulta(
+                "SELECT nombre, ciudad, total_eventos FROM vista_ranking_ubicaciones",
+                fetch=True
+            )
+            for item in self.tree_ranking_ubicaciones.get_children():
+                self.tree_ranking_ubicaciones.delete(item)
+            for row in ranking:
+                self.tree_ranking_ubicaciones.insert("", "end", values=row)
         except Exception as e:
             print(f"Error cargando ubicaciones: {e}")
 
@@ -824,6 +843,15 @@ class AppAgenda(ctk.CTk):
         ctk.CTkButton(form, text="💾 Actualizar seleccionada", command=self.actualizar_tarea).pack(fill="x", padx=10, pady=5)
         ctk.CTkButton(form, text="🧹 Nueva / Limpiar", command=self.limpiar_form_tarea, fg_color="gray").pack(fill="x", padx=10, pady=5)
         ctk.CTkButton(form, text="🗑 Eliminar seleccionada", command=self.eliminar_tarea, fg_color="#b33939", hover_color="#8f2d2d").pack(fill="x", padx=10, pady=5)
+        panel_reporte = ctk.CTkFrame(self.tab_tareas)
+        panel_reporte.pack(fill="both", expand=False, padx=15, pady=(0, 15))
+
+        ctk.CTkLabel(panel_reporte, text="Carga de trabajo por usuario",
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=12, pady=(10, 8))
+
+        self.tree_carga_trabajo = self.crear_treeview(
+            panel_reporte, ("Usuario", "Tareas activas", "Tareas vencidas"), (200, 130, 130)
+        )
 
         self.limpiar_form_tarea()
 
@@ -926,6 +954,17 @@ class AppAgenda(ctk.CTk):
             valores_u = ["Seleccione un usuario"] + list(self.usuarios_combo.keys())
             self.combo_tarea_evento.configure(values=valores_e)
             self.combo_tarea_usuario.configure(values=valores_u)
+
+            # RF-16/RF-17: carga de trabajo por usuario
+            carga = self.ejecutar_consulta("""
+                SELECT nombre || ' ' || apellido, carga_activa, vencidas
+                FROM vista_carga_trabajo
+                WHERE carga_activa > 0 OR vencidas > 0
+            """, fetch=True)
+            for item in self.tree_carga_trabajo.get_children():
+                self.tree_carga_trabajo.delete(item)
+            for row in carga:
+                self.tree_carga_trabajo.insert("", "end", values=row)
         except Exception as e:
             print(f"Error cargando tareas: {e}")
         # -------------------- DISPONIBILIDAD --------------------
